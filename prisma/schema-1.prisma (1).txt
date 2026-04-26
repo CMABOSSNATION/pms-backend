@@ -1,0 +1,161 @@
+// prisma/schema.prisma
+// Database: SQLite (works offline, no server needed)
+// Switch datasource to postgresql for production
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── USERS (Staff login accounts) ─────────────────────────────────────────────
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String   // bcrypt hashed
+  role      String   @default("GUARD") // WARDEN | GUARD | MEDICAL | ADMIN
+  badgeNumber String @unique
+  shift     String   @default("DAY")   // DAY | NIGHT | SWING
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  incidents    Incident[]   @relation("ReportedBy")
+  scans        ScanLog[]    @relation("ScannedBy")
+  auditLogs    AuditLog[]
+}
+
+// ─── PRISONERS ────────────────────────────────────────────────────────────────
+model Prisoner {
+  id          String   @id @default(cuid())
+  prisonerId  String   @unique  // e.g. P-001
+  name        String
+  age         Int
+  crime       String
+  sentence    String
+  cellBlock   String
+  cell        String
+  status      String   @default("INCARCERATED") // INCARCERATED | RELEASED | TRANSFERRED
+  riskLevel   String   @default("MEDIUM")       // LOW | MEDIUM | HIGH
+  fingerprint String   @unique
+  entryDate   DateTime
+  releaseDate DateTime?
+  photoUrl    String?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  incidents   Incident[]
+  scans       ScanLog[]
+  movements   Movement[]
+  alerts      Alert[]
+  visits      Visit[]
+  medicalRecords MedicalRecord[]
+}
+
+// ─── INCIDENTS ────────────────────────────────────────────────────────────────
+model Incident {
+  id          String   @id @default(cuid())
+  incidentId  String   @unique   // e.g. INC-001
+  type        String              // Fight | Contraband | Escape Attempt | Medical | etc.
+  description String
+  severity    String   @default("MEDIUM") // LOW | MEDIUM | HIGH
+  location    String?
+  resolved    Boolean  @default(false)
+  resolvedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  prisoner    Prisoner @relation(fields: [prisonerId], references: [id])
+  prisonerId  String
+  reportedBy  User     @relation("ReportedBy", fields: [userId], references: [id])
+  userId      String
+}
+
+// ─── SCAN LOG ─────────────────────────────────────────────────────────────────
+model ScanLog {
+  id         String   @id @default(cuid())
+  location   String
+  riskLevel  String
+  hasAlerts  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  prisoner   Prisoner @relation(fields: [prisonerId], references: [id])
+  prisonerId String
+  scannedBy  User     @relation("ScannedBy", fields: [userId], references: [id])
+  userId     String
+}
+
+// ─── PRISONER MOVEMENTS ───────────────────────────────────────────────────────
+model Movement {
+  id         String   @id @default(cuid())
+  from       String
+  to         String
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  prisoner   Prisoner @relation(fields: [prisonerId], references: [id])
+  prisonerId String
+}
+
+// ─── ALERTS ───────────────────────────────────────────────────────────────────
+model Alert {
+  id         String   @id @default(cuid())
+  message    String
+  severity   String   @default("MEDIUM")
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  prisoner   Prisoner @relation(fields: [prisonerId], references: [id])
+  prisonerId String
+}
+
+// ─── VISITOR MANAGEMENT ───────────────────────────────────────────────────────
+model Visit {
+  id           String   @id @default(cuid())
+  visitorName  String
+  relationship String
+  visitDate    DateTime
+  duration     Int      @default(30)  // minutes
+  status       String   @default("SCHEDULED") // SCHEDULED | COMPLETED | CANCELLED
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  prisoner     Prisoner @relation(fields: [prisonerId], references: [id])
+  prisonerId   String
+}
+
+// ─── MEDICAL RECORDS ──────────────────────────────────────────────────────────
+model MedicalRecord {
+  id          String   @id @default(cuid())
+  type        String   // Checkup | Emergency | Medication | Mental Health
+  description String
+  treatment   String?
+  medication  String?
+  nextReview  DateTime?
+  createdAt   DateTime @default(now())
+
+  prisoner    Prisoner @relation(fields: [prisonerId], references: [id])
+  prisonerId  String
+}
+
+// ─── AUDIT LOG ────────────────────────────────────────────────────────────────
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String   // CREATE | UPDATE | DELETE | LOGIN | SCAN
+  entity    String   // Prisoner | Incident | User | etc.
+  entityId  String?
+  details   String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+}
