@@ -7,21 +7,18 @@ import prisma from "../config/prisma.js";
 export const getItems = async (req, res, next) => {
   try {
     const { category, lowStock } = req.query;
+    const isAdmin = ["WARDEN", "ADMIN"].includes(req.user.role);
 
     const items = await prisma.inventoryItem.findMany({
       where: {
         ...(category && { category }),
-        // Armory: only WARDEN/ADMIN see restricted items
-        ...(!["WARDEN", "ADMIN"].includes(req.user.role) && { isRestricted: false }),
-        ...(lowStock === "true" && {
-          currentStock: { lte: prisma.inventoryItem.fields.minimumStock },
-        }),
+        ...(!isAdmin && { isRestricted: false }),
       },
       include: { logs: { orderBy: { createdAt: "desc" }, take: 5 } },
       orderBy: { category: "asc" },
     });
 
-    // Manually filter low-stock since Prisma can't compare two fields directly
+    // Filter low stock manually (Prisma can't compare two columns directly)
     const result = lowStock === "true"
       ? items.filter(i => i.currentStock <= i.minimumStock)
       : items;
@@ -82,8 +79,8 @@ export const updateItem = async (req, res, next) => {
       where: { id: req.params.id },
       data: {
         ...(name && { name }),
-        ...(minimumStock && { minimumStock: parseInt(minimumStock) }),
-        ...(maximumStock && { maximumStock: parseInt(maximumStock) }),
+        ...(minimumStock !== undefined && { minimumStock: parseInt(minimumStock) }),
+        ...(maximumStock !== undefined && { maximumStock: parseInt(maximumStock) }),
         ...(unitCost !== undefined && { unitCost: parseFloat(unitCost) }),
         ...(supplier !== undefined && { supplier }),
         ...(location !== undefined && { location }),
@@ -115,7 +112,7 @@ export const stockTransaction = async (req, res, next) => {
       if (item.currentStock < qty) return res.status(400).json({ error: "Insufficient stock" });
       newStock -= qty;
     } else if (transactionType === "ADJUSTMENT") {
-      newStock = qty; // direct set
+      newStock = qty;
     }
 
     const [updatedItem, log] = await prisma.$transaction([
@@ -141,10 +138,9 @@ export const stockTransaction = async (req, res, next) => {
 // ─── LOW STOCK ALERTS ─────────────────────────────────────────────────────────
 export const getLowStockAlerts = async (req, res, next) => {
   try {
+    const isAdmin = ["WARDEN", "ADMIN"].includes(req.user.role);
     const items = await prisma.inventoryItem.findMany({
-      where: {
-        ...(!["WARDEN", "ADMIN"].includes(req.user.role) && { isRestricted: false }),
-      },
+      where: { ...(!isAdmin && { isRestricted: false }) },
     });
     const lowStock = items.filter(i => i.currentStock <= i.minimumStock);
     const critical = lowStock.filter(i => i.currentStock === 0);
@@ -165,12 +161,12 @@ export const getAuditLogs = async (req, res, next) => {
         ...(entity && { entity }),
         ...(action && { action }),
         ...(userId && { userId }),
-        ...(from || to) && {
+        ...((from || to) && {
           createdAt: {
             ...(from && { gte: new Date(from) }),
             ...(to && { lte: new Date(to) }),
           },
-        },
+        }),
       },
       include: { user: { select: { name: true, email: true, role: true, badgeNumber: true } } },
       orderBy: { createdAt: "desc" },
