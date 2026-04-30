@@ -12,7 +12,8 @@ export const protect = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
-      select: { id: true, name: true, email: true, role: true, isActive: true },
+      // ← badgeNumber added so biometricController can use req.user.badgeNumber
+      select: { id: true, name: true, email: true, role: true, badgeNumber: true, isActive: true },
     });
     if (!user || !user.isActive) {
       return res.status(401).json({ message: "Not authorized, user inactive" });
