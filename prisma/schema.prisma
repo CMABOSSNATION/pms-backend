@@ -70,6 +70,9 @@ model Prisoner {
   hearings           CourtHearing[]
   custodyLogs        CustodyLog[]
   biometricLogs      BiometricLog[]
+  ecmsCases          EcmsCase[]
+  industryEnrollments IndustryEnrollment[]
+  consentRecords     ConsentRecord[]
 }
 
 // ─── INCIDENTS ────────────────────────────────────────────────────────────────
@@ -360,4 +363,122 @@ model AuditLog {
 
   user   User   @relation(fields: [userId], references: [id])
   userId String
+}
+
+// ─── NATIONAL INTEGRATIONS (NIRA / eCMS) ─────────────────────────────────────
+model NiraLookup {
+  id            String   @id @default(cuid())
+  nationalId    String
+  fullName      String?
+  dob           String?
+  gender        String?
+  photoUrl      String?
+  rawResponse   String?  // JSON blob from NIRA API
+  matchedTo     String?  // prisoner prisonerId
+  verifiedAt    DateTime @default(now())
+  verifiedBy    String   // userId
+}
+
+model EcmsCase {
+  id           String   @id @default(cuid())
+  caseNumber   String   @unique
+  prisonerId   String
+  courtName    String
+  judge        String?
+  status       String   @default("OPEN") // OPEN | CLOSED | APPEALED
+  charges      String?
+  lastSyncedAt DateTime?
+  rawData      String?  // Full JSON from eCMS
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  prisoner     Prisoner @relation(fields: [prisonerId], references: [id])
+}
+
+// ─── PRISON INDUSTRIES ───────────────────────────────────────────────────────
+model Industry {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  category    String   // FARMING | CARPENTRY | TAILORING | BAKERY | CRAFTS | LAUNDRY | PRINTING | OTHER
+  description String?
+  supervisor  String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  enrollments IndustryEnrollment[]
+  productions IndustryProduction[]
+}
+
+model IndustryEnrollment {
+  id         String   @id @default(cuid())
+  startDate  DateTime
+  endDate    DateTime?
+  status     String   @default("ACTIVE") // ACTIVE | COMPLETED | WITHDRAWN
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  prisoner   Prisoner @relation(fields: [prisonerId], references: [id])
+  prisonerId String
+  industry   Industry @relation(fields: [industryId], references: [id])
+  industryId String
+}
+
+model IndustryProduction {
+  id          String   @id @default(cuid())
+  date        DateTime
+  quantity    Float
+  unit        String   // kg | units | metres | loaves | etc
+  valueUGX    Float?
+  notes       String?
+  recordedBy  String   // userId
+  createdAt   DateTime @default(now())
+
+  industry    Industry @relation(fields: [industryId], references: [id])
+  industryId  String
+}
+
+// ─── OFFLINE SYNC QUEUE ───────────────────────────────────────────────────────
+model SyncQueue {
+  id          String   @id @default(cuid())
+  deviceId    String
+  entity      String
+  operation   String   // CREATE | UPDATE | DELETE
+  payload     String   // JSON
+  localId     String?
+  serverIdMap String?  // maps localId → real server id after sync
+  status      String   @default("PENDING") // PENDING | SYNCED | CONFLICT | FAILED
+  conflictData String?
+  createdAt   DateTime @default(now())
+  syncedAt    DateTime?
+}
+
+// ─── DATA PRIVACY (Uganda DPA 2019) ──────────────────────────────────────────
+model DataRequest {
+  id           String   @id @default(cuid())
+  requestType  String   // ACCESS | RECTIFICATION | ERASURE | RESTRICTION | PORTABILITY | OBJECTION
+  subjectName  String
+  subjectId    String?  // prisonerId or nationalId
+  requestedBy  String   // Name of person making request
+  relationship String?  // Self | Legal Rep | Family
+  status       String   @default("PENDING") // PENDING | IN_REVIEW | FULFILLED | REJECTED
+  notes        String?
+  resolution   String?
+  dueDate      DateTime // Must be resolved within 21 days per Uganda DPA
+  resolvedAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  handledBy    String?  // userId of officer who resolved
+}
+
+model ConsentRecord {
+  id          String   @id @default(cuid())
+  prisonerId  String
+  purpose     String   // BIOMETRIC_SCAN | MEDICAL_SHARE | NATIONAL_DB_SHARE | RESEARCH | LEGAL_SHARE
+  granted     Boolean
+  grantedAt   DateTime @default(now())
+  revokedAt   DateTime?
+  notes       String?
+
+  prisoner    Prisoner @relation(fields: [prisonerId], references: [id])
 }
