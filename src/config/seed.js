@@ -160,3 +160,50 @@ async function main() {
 main()
   .catch(e => { console.error(e); process.exit(1); })
   .finally(() => prisma.$disconnect());
+
+  // ── Industries ───────────────────────────────────────────────────────────────
+  const industries = [
+    { name: "Luzira Farm Unit",       category: "FARMING",   supervisor: "Sgt. Okello B.", description: "Crop farming — maize, beans, cassava" },
+    { name: "Woodwork & Carpentry",   category: "CARPENTRY", supervisor: "Sgt. Nassaka R.", description: "Furniture making and wood products" },
+    { name: "Tailoring & Uniforms",   category: "TAILORING", supervisor: "Sgt. Apio M.",    description: "Prison uniform production and repairs" },
+    { name: "Prison Bakery",          category: "BAKERY",    supervisor: "Sgt. Wamala J.",  description: "Daily bread and pastry production" },
+  ];
+
+  const industryRecords = [];
+  for (const ind of industries) {
+    const existing = await prisma.industry.findUnique({ where: { name: ind.name } });
+    if (!existing) {
+      const created = await prisma.industry.create({ data: ind });
+      industryRecords.push(created);
+    } else {
+      industryRecords.push(existing);
+    }
+  }
+
+  // Enroll prisoners in industries
+  if (industryRecords.length > 0) {
+    const enrollments = [
+      { prisonerId: p1.id, industryId: industryRecords[0].id, startDate: new Date("2022-01-10") },
+      { prisonerId: p2.id, industryId: industryRecords[1].id, startDate: new Date("2022-09-01") },
+      { prisonerId: p3.id, industryId: industryRecords[2].id, startDate: new Date("2023-03-01") },
+    ];
+    for (const enr of enrollments) {
+      const exists = await prisma.industryEnrollment.findFirst({
+        where: { prisonerId: enr.prisonerId, industryId: enr.industryId, status: "ACTIVE" },
+      });
+      if (!exists) await prisma.industryEnrollment.create({ data: enr });
+    }
+
+    // Sample production logs
+    const prods = [
+      { industryId: industryRecords[0].id, date: new Date("2024-11-01"), quantity: 120, unit: "kg", valueUGX: 240000, recordedBy: warden.id },
+      { industryId: industryRecords[1].id, date: new Date("2024-11-01"), quantity: 4,   unit: "chairs", valueUGX: 320000, recordedBy: warden.id },
+      { industryId: industryRecords[3].id, date: new Date("2024-11-01"), quantity: 200, unit: "loaves", valueUGX: 100000, recordedBy: warden.id },
+    ];
+    for (const prod of prods) {
+      const exists = await prisma.industryProduction.findFirst({
+        where: { industryId: prod.industryId, date: prod.date },
+      });
+      if (!exists) await prisma.industryProduction.create({ data: prod });
+    }
+  }
