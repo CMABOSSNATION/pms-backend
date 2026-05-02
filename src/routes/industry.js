@@ -1,0 +1,15 @@
+import { Router } from "express";
+import { authorize } from "../middleware/auth.js";
+import { auditLog } from "../middleware/audit.js";
+import { getIndustries, createIndustry, updateIndustry, getEnrollments, enrollPrisoner, updateEnrollment, getProductions, logProduction, getIndustrySummary } from "../controllers/industryController.js";
+const router = Router();
+router.get("/",                    getIndustries);
+router.get("/summary",             getIndustrySummary);
+router.post("/",                   authorize("WARDEN","ADMIN"), auditLog("CREATE","Industry"), createIndustry);
+router.put("/:id",                 authorize("WARDEN","ADMIN"), auditLog("UPDATE","Industry"), updateIndustry);
+router.get("/enrollments",         getEnrollments);
+router.post("/enrollments",        auditLog("CREATE","IndustryEnrollment"), enrollPrisoner);
+router.put("/enrollments/:id",     auditLog("UPDATE","IndustryEnrollment"), updateEnrollment);
+router.get("/productions",         getProductions);
+router.post("/productions",        auditLog("CREATE","IndustryProduction"), logProduction);
+export default router;

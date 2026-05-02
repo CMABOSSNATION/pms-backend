@@ -1,0 +1,13 @@
+import { Router } from "express";
+import { authorize } from "../middleware/auth.js";
+import { auditLog } from "../middleware/audit.js";
+import { getRequests, createRequest, resolveRequest, getConsents, recordConsent, getPrivacyDashboard, getStrictAuditTrail } from "../controllers/privacyController.js";
+const router = Router();
+router.get("/dashboard",           getPrivacyDashboard);
+router.get("/audit",               authorize("WARDEN","ADMIN"), getStrictAuditTrail);
+router.get("/requests",            getRequests);
+router.post("/requests",           auditLog("CREATE","DataRequest"), createRequest);
+router.put("/requests/:id/resolve",authorize("WARDEN","ADMIN"), auditLog("UPDATE","DataRequest"), resolveRequest);
+router.get("/consents",            getConsents);
+router.post("/consents",           auditLog("CREATE","Consent"), recordConsent);
+export default router;

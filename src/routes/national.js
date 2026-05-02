@@ -1,0 +1,11 @@
+import { Router } from "express";
+import { authorize } from "../middleware/auth.js";
+import { auditLog } from "../middleware/audit.js";
+import { nireLookup, getNiraHistory, ecmsSync, getEcmsCases, exportNationalDB } from "../controllers/nationalController.js";
+const router = Router();
+router.get("/nira",            getNiraHistory);
+router.post("/nira/lookup",    authorize("WARDEN","ADMIN","LEGAL"), auditLog("VIEW","NIRA"), nireLookup);
+router.get("/ecms",            getEcmsCases);
+router.post("/ecms/sync",      authorize("WARDEN","ADMIN","LEGAL"), auditLog("SYNC","eCMS"), ecmsSync);
+router.post("/export",         authorize("WARDEN","ADMIN"), auditLog("EXPORT","NationalDB"), exportNationalDB);
+export default router;
