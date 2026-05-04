@@ -13,7 +13,14 @@ const PORT = process.env.PORT || 5000;
 
 // ─── MIDDLEWARE ───────────────────────────────────────────────────────────────
 app.use(cors({
-  origin: true,
+  // Allow requests from local frontend (Vite dev, built preview, Capacitor app)
+  origin: [
+    "http://localhost:5173",
+    "http://localhost:4173",
+    "http://localhost:3000",
+    "capacitor://localhost",
+    "http://localhost",
+  ],
   credentials: true,
 }));
 app.use(express.json());
@@ -26,6 +33,7 @@ app.get("/health", (req, res) => {
     status:    "ok",
     service:   "PrisonCore API",
     version:   "1.0.0",
+    offline:   true,
     timestamp: new Date().toISOString(),
   });
 });
@@ -38,12 +46,13 @@ app.use(notFound);
 app.use(errorHandler);
 
 // ─── START ────────────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
+app.listen(PORT, "127.0.0.1", () => {
   console.log(`
   ╔══════════════════════════════════════╗
   ║   🏛️  PrisonCore API  v1.0.0        ║
   ║   http://localhost:${PORT}            ║
   ║   Mode: ${process.env.NODE_ENV || "development"}                  ║
+  ║   DB:   SQLite (offline)            ║
   ╚══════════════════════════════════════╝
   `);
 });
