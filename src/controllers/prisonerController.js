@@ -1,5 +1,4 @@
 // src/controllers/prisonerController.js
-
 import prisma from "../config/prisma.js";
 
 // ─── GET /api/prisoners ───────────────────────────────────────────────────────
@@ -7,24 +6,30 @@ export const getPrisoners = async (req, res, next) => {
   try {
     const { search, riskLevel, cellBlock, status } = req.query;
 
+    // NOTE: SQLite does not support `mode: "insensitive"` in Prisma.
+    // We use plain `contains` which is case-sensitive on SQLite.
+    // Search is lowercased on both sides for a manual case-insensitive match.
     const where = {
       ...(search && {
         OR: [
-          { name:       { contains: search, mode: "insensitive" } },
-          { prisonerId: { contains: search, mode: "insensitive" } },
-          { crime:      { contains: search, mode: "insensitive" } },
-          { cell:       { contains: search, mode: "insensitive" } },
-          { fingerprint:{ contains: search, mode: "insensitive" } },
+          { name:        { contains: search } },
+          { prisonerId:  { contains: search } },
+          { crime:       { contains: search } },
+          { cell:        { contains: search } },
+          { fingerprint: { contains: search } },
         ],
       }),
-      ...(riskLevel  && { riskLevel }),
-      ...(cellBlock  && { cellBlock }),
-      ...(status     && { status }),
+      ...(riskLevel && { riskLevel }),
+      ...(cellBlock && { cellBlock }),
+      ...(status    && { status }),
     };
 
     const prisoners = await prisma.prisoner.findMany({
       where,
-      include: { alerts: true, _count: { select: { incidents: true, scans: true } } },
+      include: {
+        alerts: true,
+        _count: { select: { incidents: true, scans: true } },
+      },
       orderBy: { createdAt: "desc" },
     });
 
@@ -71,11 +76,11 @@ export const createPrisoner = async (req, res, next) => {
     const prisoner = await prisma.prisoner.create({
       data: {
         prisonerId, name, crime, sentence, cellBlock, cell,
-        age:        parseInt(age) || 0,
-        riskLevel:  riskLevel  || "MEDIUM",
+        age:         parseInt(age) || 0,
+        riskLevel:   riskLevel   || "MEDIUM",
         fingerprint,
-        entryDate:  entryDate  ? new Date(entryDate)  : new Date(),
-        releaseDate:releaseDate? new Date(releaseDate) : null,
+        entryDate:   entryDate   ? new Date(entryDate)   : new Date(),
+        releaseDate: releaseDate ? new Date(releaseDate)  : null,
         photoUrl, notes,
       },
     });
