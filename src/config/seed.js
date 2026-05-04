@@ -123,7 +123,7 @@ async function main() {
     },
   });
 
-  // ── Alerts (skip if already exist) ───────────────────────────────────────────
+  // ── Alerts ───────────────────────────────────────────────────────────────────
   const existingAlert = await prisma.alert.findFirst({ where: { prisonerId: p1.id } });
   if (!existingAlert) {
     await prisma.alert.create({
@@ -133,12 +133,12 @@ async function main() {
 
   // ── Sample Inventory Items ────────────────────────────────────────────────────
   const invItems = [
-    { itemCode: "INV-FOO-0001", name: "Prison Rations (Daily)", category: "FOOD", unit: "kg", currentStock: 450, minimumStock: 100, maximumStock: 1000, unitCost: 2.5, location: "Kitchen Store" },
-    { itemCode: "INV-UNI-0001", name: "Prison Uniforms", category: "UNIFORM", unit: "units", currentStock: 80, minimumStock: 50, maximumStock: 300, unitCost: 15, location: "Stores Room A" },
-    { itemCode: "INV-MED-0001", name: "Paracetamol 500mg", category: "MEDICAL", unit: "tablets", currentStock: 1200, minimumStock: 200, maximumStock: 5000, unitCost: 0.05, location: "Medical Store" },
-    { itemCode: "INV-ARM-0001", name: "Duty Batons", category: "ARMORY", unit: "units", currentStock: 24, minimumStock: 20, maximumStock: 60, unitCost: 45, location: "Armory Vault", isRestricted: true },
-    { itemCode: "INV-MAI-0001", name: "Cell Padlocks", category: "MAINTENANCE", unit: "units", currentStock: 8, minimumStock: 15, maximumStock: 100, unitCost: 12, location: "Maintenance Store" },
-    { itemCode: "INV-OFF-0001", name: "A4 Paper Reams", category: "OFFICE", unit: "reams", currentStock: 30, minimumStock: 10, maximumStock: 100, unitCost: 6, location: "Admin Office" },
+    { itemCode: "INV-FOO-0001", name: "Prison Rations (Daily)",  category: "FOOD",        unit: "kg",      currentStock: 450,  minimumStock: 100, maximumStock: 1000, unitCost: 2.5,  location: "Kitchen Store" },
+    { itemCode: "INV-UNI-0001", name: "Prison Uniforms",         category: "UNIFORM",     unit: "units",   currentStock: 80,   minimumStock: 50,  maximumStock: 300,  unitCost: 15,   location: "Stores Room A" },
+    { itemCode: "INV-MED-0001", name: "Paracetamol 500mg",       category: "MEDICAL",     unit: "tablets", currentStock: 1200, minimumStock: 200, maximumStock: 5000, unitCost: 0.05, location: "Medical Store" },
+    { itemCode: "INV-ARM-0001", name: "Duty Batons",             category: "ARMORY",      unit: "units",   currentStock: 24,   minimumStock: 20,  maximumStock: 60,   unitCost: 45,   location: "Armory Vault", isRestricted: true },
+    { itemCode: "INV-MAI-0001", name: "Cell Padlocks",           category: "MAINTENANCE", unit: "units",   currentStock: 8,    minimumStock: 15,  maximumStock: 100,  unitCost: 12,   location: "Maintenance Store" },
+    { itemCode: "INV-OFF-0001", name: "A4 Paper Reams",          category: "OFFICE",      unit: "reams",   currentStock: 30,   minimumStock: 10,  maximumStock: 100,  unitCost: 6,    location: "Admin Office" },
   ];
 
   for (const inv of invItems) {
@@ -149,28 +149,16 @@ async function main() {
     });
   }
 
-  console.log("✅ Seed complete!");
-  console.log("   Warden    → warden@prisoncore.local    / Warden@1234");
-  console.log("   Guard     → guard@prisoncore.local     / Guard@1234");
-  console.log("   Medical   → medical@prisoncore.local   / Medical@1234");
-  console.log("   Legal     → legal@prisoncore.local     / Legal@1234");
-  console.log("   Inventory → inventory@prisoncore.local / Inventory@1234");
-}
-
-main()
-  .catch(e => { console.error(e); process.exit(1); })
-  .finally(() => prisma.$disconnect());
-
   // ── Industries ───────────────────────────────────────────────────────────────
-  const industries = [
-    { name: "Luzira Farm Unit",       category: "FARMING",   supervisor: "Sgt. Okello B.", description: "Crop farming — maize, beans, cassava" },
-    { name: "Woodwork & Carpentry",   category: "CARPENTRY", supervisor: "Sgt. Nassaka R.", description: "Furniture making and wood products" },
-    { name: "Tailoring & Uniforms",   category: "TAILORING", supervisor: "Sgt. Apio M.",    description: "Prison uniform production and repairs" },
-    { name: "Prison Bakery",          category: "BAKERY",    supervisor: "Sgt. Wamala J.",  description: "Daily bread and pastry production" },
+  const industryDefs = [
+    { name: "Luzira Farm Unit",     category: "FARMING",   supervisor: "Sgt. Okello B.",   description: "Crop farming — maize, beans, cassava" },
+    { name: "Woodwork & Carpentry", category: "CARPENTRY", supervisor: "Sgt. Nassaka R.",  description: "Furniture making and wood products" },
+    { name: "Tailoring & Uniforms", category: "TAILORING", supervisor: "Sgt. Apio M.",     description: "Prison uniform production and repairs" },
+    { name: "Prison Bakery",        category: "BAKERY",    supervisor: "Sgt. Wamala J.",   description: "Daily bread and pastry production" },
   ];
 
   const industryRecords = [];
-  for (const ind of industries) {
+  for (const ind of industryDefs) {
     const existing = await prisma.industry.findUnique({ where: { name: ind.name } });
     if (!existing) {
       const created = await prisma.industry.create({ data: ind });
@@ -196,7 +184,7 @@ main()
 
     // Sample production logs
     const prods = [
-      { industryId: industryRecords[0].id, date: new Date("2024-11-01"), quantity: 120, unit: "kg", valueUGX: 240000, recordedBy: warden.id },
+      { industryId: industryRecords[0].id, date: new Date("2024-11-01"), quantity: 120, unit: "kg",     valueUGX: 240000, recordedBy: warden.id },
       { industryId: industryRecords[1].id, date: new Date("2024-11-01"), quantity: 4,   unit: "chairs", valueUGX: 320000, recordedBy: warden.id },
       { industryId: industryRecords[3].id, date: new Date("2024-11-01"), quantity: 200, unit: "loaves", valueUGX: 100000, recordedBy: warden.id },
     ];
@@ -207,3 +195,15 @@ main()
       if (!exists) await prisma.industryProduction.create({ data: prod });
     }
   }
+
+  console.log("✅ Seed complete!");
+  console.log("   Warden    → warden@prisoncore.local    / Warden@1234");
+  console.log("   Guard     → guard@prisoncore.local     / Guard@1234");
+  console.log("   Medical   → medical@prisoncore.local   / Medical@1234");
+  console.log("   Legal     → legal@prisoncore.local     / Legal@1234");
+  console.log("   Inventory → inventory@prisoncore.local / Inventory@1234");
+}
+
+main()
+  .catch(e => { console.error(e); process.exit(1); })
+  .finally(() => prisma.$disconnect());
