@@ -1,0 +1,635 @@
+// prisma/schema.prisma
+// Database: PostgreSQL — Render managed database (free tier)
+// Supports offline-first sync via SyncQueue + DeviceRegistry
+
+generator client {
+  provider      = "prisma-client-js"
+  // Bundles the correct Prisma engine for Render (Linux) AND local dev
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── USERS (Staff login accounts) ─────────────────────────────────────────────
+model User {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  password    String
+  role        String   @default("GUARD") // WARDEN | GUARD | MEDICAL | ADMIN | LEGAL | INVENTORY
+  badgeNumber String   @unique
+  shift       String   @default("DAY")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  incidents          Incident[]          @relation("ReportedBy")
+  scans              ScanLog[]           @relation("ScannedBy")
+  auditLogs          AuditLog[]
+  movementAuthorized Movement[]          @relation("AuthorizedBy")
+  custodySignatures  CustodyLog[]        @relation("OfficerSigned")
+  medicationLogs     MedicationLog[]     @relation("DispenserBy")
+  inventoryLogs      InventoryLog[]      @relation("LoggedBy")
+
+  @@index([role])
+  @@index([isActive])
+  @@map("users")
+}
+
+// ─── PRISONERS ────────────────────────────────────────────────────────────────
+model Prisoner {
+  id          String    @id @default(cuid())
+  prisonerId  String    @unique
+  name        String
+  age         Int
+  crime       String
+  sentence    String
+  cellBlock   String
+  cell        String
+  status      String    @default("INCARCERATED") // INCARCERATED | RELEASED | TRANSFERRED | REMAND
+  riskLevel   String    @default("MEDIUM")
+  fingerprint String    @unique
+  irisCode    String?
+  entryDate   DateTime
+  arrestDate  DateTime?
+  releaseDate DateTime?
+  photoUrl    String?
+  notes       String?   @db.Text
+  nationality String?
+  nationalId  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  incidents           Incident[]
+  scans               ScanLog[]
+  movements           Movement[]
+  alerts              Alert[]
+  visits              Visit[]
+  medicalRecords      MedicalRecord[]
+  vaccinations        Vaccination[]
+  medications         MedicationLog[]
+  rehabilitationLogs  RehabilitationLog[]
+  warrants            Warrant[]
+  sentences           SentenceRecord[]
+  hearings            CourtHearing[]
+  custodyLogs         CustodyLog[]
+  biometricLogs       BiometricLog[]
+  ecmsCases           EcmsCase[]
+  industryEnrollments IndustryEnrollment[]
+  consentRecords      ConsentRecord[]
+
+  @@index([status])
+  @@index([cellBlock, cell])
+  @@index([riskLevel])
+  @@index([releaseDate])
+  @@map("prisoners")
+}
+
+// ─── INCIDENTS ────────────────────────────────────────────────────────────────
+model Incident {
+  id          String    @id @default(cuid())
+  incidentId  String    @unique
+  type        String
+  description String    @db.Text
+  severity    String    @default("MEDIUM")
+  location    String?
+  resolved    Boolean   @default(false)
+  resolvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  prisoner   Prisoner @relation(fields: [prisonerId], references: [id])
+  prisonerId String
+  reportedBy User     @relation("ReportedBy", fields: [userId], references: [id])
+  userId     String
+
+  @@index([prisonerId])
+  @@index([userId])
+  @@index([resolved])
+  @@index([severity])
+  @@map("incidents")
+}
+
+// ─── SCAN LOG ─────────────────────────────────────────────────────────────────
+model ScanLog {
+  id         String   @id @default(cuid())
+  location   String
+  riskLevel  String
+  hasAlerts  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  prisoner   Prisoner @relation(fields: [prisonerId], references: [id])
+  prisonerId String
+  scannedBy  User     @relation("ScannedBy", fields: [userId], references: [id])
+  userId     String
+
+  @@index([prisonerId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("scan_logs")
+}
+
+// ─── PRISONER MOVEMENTS ───────────────────────────────────────────────────────
+model Movement {
+  id             String    @id @default(cuid())
+  from           String
+  to             String
+  reason         String?
+  category       String    @default("INTERNAL") // INTERNAL | CLINIC | VISITOR | COURT | TRANSFER | EXERCISE
+  escortBadge    String?
+  returnedAt     DateTime?
+  createdAt      DateTime  @default(now())
+
+  prisoner       Prisoner @relation(fields: [prisonerId], references: [id])
+  prisonerId     String
+  authorizedBy   User?    @relation("AuthorizedBy", fields: [authorizedById], references: [id])
+  authorizedById String?
+
+  @@index([prisonerId])
+  @@index([authorizedById])
+  @@index([category])
+  @@map("movements")
+}
+
+// ─── ALERTS ───────────────────────────────────────────────────────────────────
+model Alert {
+  id         String   @id @default(cuid())
+  message    String   @db.Text
+  severity   String   @default("MEDIUM")
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  prisoner   Prisoner @relation(fields: [prisonerId], references: [id])
+  prisonerId String
+
+  @@index([prisonerId])
+  @@index([isRead])
+  @@index([severity])
+  @@map("alerts")
+}
+
+// ─── VISITOR MANAGEMENT ───────────────────────────────────────────────────────
+model Visit {
+  id           String   @id @default(cuid())
+  visitorName  String
+  relationship String
+  visitDate    DateTime
+  duration     Int      @default(30)
+  status       String   @default("SCHEDULED")
+  notes        String?  @db.Text
+  createdAt    DateTime @default(now())
+
+  prisoner   Prisoner @relation(fields: [prisonerId], references: [id])
+  prisonerId String
+
+  @@index([prisonerId])
+  @@index([visitDate])
+  @@index([status])
+  @@map("visits")
+}
+
+// ─── MEDICAL RECORDS ──────────────────────────────────────────────────────────
+model MedicalRecord {
+  id             String    @id @default(cuid())
+  type           String
+  description    String    @db.Text
+  treatment      String?   @db.Text
+  medication     String?
+  diagnosis      String?   @db.Text
+  nextReview     DateTime?
+  isConfidential Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+
+  prisoner   Prisoner @relation(fields: [prisonerId], references: [id])
+  prisonerId String
+
+  @@index([prisonerId])
+  @@index([nextReview])
+  @@map("medical_records")
+}
+
+// ─── VACCINATION RECORDS ──────────────────────────────────────────────────────
+model Vaccination {
+  id          String    @id @default(cuid())
+  vaccine     String
+  doseNumber  Int       @default(1)
+  givenDate   DateTime
+  nextDueDate DateTime?
+  givenBy     String
+  batchNumber String?
+  createdAt   DateTime  @default(now())
+
+  prisoner   Prisoner @relation(fields: [prisonerId], references: [id])
+  prisonerId String
+
+  @@index([prisonerId])
+  @@index([nextDueDate])
+  @@map("vaccinations")
+}
+
+// ─── MEDICATION DISPENSING (eMAR) ─────────────────────────────────────────────
+model MedicationLog {
+  id             String   @id @default(cuid())
+  medicationName String
+  dosage         String
+  dispensedAt    DateTime @default(now())
+  scheduledAt    DateTime
+  status         String   @default("DISPENSED") // DISPENSED | REFUSED | MISSED
+  notes          String?  @db.Text
+
+  prisoner      Prisoner @relation(fields: [prisonerId], references: [id])
+  prisonerId    String
+  dispensedBy   User     @relation("DispenserBy", fields: [dispensedById], references: [id])
+  dispensedById String
+
+  @@index([prisonerId])
+  @@index([dispensedById])
+  @@index([status])
+  @@index([scheduledAt])
+  @@map("medication_logs")
+}
+
+// ─── REHABILITATION LOGS ──────────────────────────────────────────────────────
+model RehabilitationLog {
+  id          String   @id @default(cuid())
+  programName String
+  category    String   @default("VOCATIONAL") // VOCATIONAL | EDUCATION | COUNSELING | WORK | RELIGIOUS
+  sessionDate DateTime
+  attended    Boolean  @default(true)
+  performance String?
+  notes       String?  @db.Text
+  instructor  String?
+  createdAt   DateTime @default(now())
+
+  prisoner   Prisoner @relation(fields: [prisonerId], references: [id])
+  prisonerId String
+
+  @@index([prisonerId])
+  @@index([sessionDate])
+  @@map("rehabilitation_logs")
+}
+
+// ─── WARRANT TRACKING ─────────────────────────────────────────────────────────
+model Warrant {
+  id            String    @id @default(cuid())
+  warrantNumber String    @unique
+  type          String    // ARREST | SEARCH | REMAND | PRODUCTION | RELEASE
+  issuedBy      String
+  courtName     String
+  issuedDate    DateTime
+  expiryDate    DateTime?
+  status        String    @default("ACTIVE") // ACTIVE | EXECUTED | EXPIRED | CANCELLED
+  documentUrl   String?
+  description   String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  prisoner   Prisoner @relation(fields: [prisonerId], references: [id])
+  prisonerId String
+
+  @@index([prisonerId])
+  @@index([status])
+  @@index([expiryDate])
+  @@map("warrants")
+}
+
+// ─── SENTENCE RECORDS ─────────────────────────────────────────────────────────
+model SentenceRecord {
+  id                 String    @id @default(cuid())
+  offenseDescription String    @db.Text
+  sentenceType       String    // CONCURRENT | CONSECUTIVE | SUSPENDED
+  sentenceYears      Int
+  startDate          DateTime
+  goodBehaviorDays   Int       @default(0)
+  remissionDays      Int       @default(0)
+  calculatedRelease  DateTime
+  actualRelease      DateTime?
+  isActive           Boolean   @default(true)
+  notes              String?   @db.Text
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  prisoner   Prisoner @relation(fields: [prisonerId], references: [id])
+  prisonerId String
+
+  @@index([prisonerId])
+  @@index([isActive])
+  @@index([calculatedRelease])
+  @@map("sentence_records")
+}
+
+// ─── COURT HEARINGS ───────────────────────────────────────────────────────────
+model CourtHearing {
+  id            String    @id @default(cuid())
+  hearingId     String    @unique
+  courtName     String
+  caseNumber    String
+  hearingType   String    // BAIL | TRIAL | SENTENCING | APPEAL | MENTION | PAROLE
+  scheduledAt   DateTime
+  venue         String?
+  judge         String?
+  outcome       String?   @db.Text
+  nextHearingAt DateTime?
+  notes         String?   @db.Text
+  syncedAt      DateTime?
+  syncPending   Boolean   @default(false) // true = local-only, awaiting online sync
+  externalRef   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  prisoner   Prisoner @relation(fields: [prisonerId], references: [id])
+  prisonerId String
+
+  @@index([prisonerId])
+  @@index([scheduledAt])
+  @@index([syncPending])
+  @@map("court_hearings")
+}
+
+// ─── CHAIN OF CUSTODY (Inmate Property) ───────────────────────────────────────
+model CustodyLog {
+  id               String    @id @default(cuid())
+  custodyId        String    @unique
+  eventType        String    // INTAKE | RELEASE | TRANSFER | INSPECTION
+  itemDescription  String    @db.Text
+  itemCategory     String    @default("PERSONAL") // PERSONAL | VALUABLES | DOCUMENTS | CONTRABAND
+  itemValue        Float?
+  quantity         Int       @default(1)
+  condition        String?
+  storageLocation  String?
+  officerSignature String?
+  inmateSignature  String?
+  signedAt         DateTime?
+  notes            String?   @db.Text
+  createdAt        DateTime  @default(now())
+
+  prisoner   Prisoner @relation(fields: [prisonerId], references: [id])
+  prisonerId String
+  officer    User     @relation("OfficerSigned", fields: [officerId], references: [id])
+  officerId  String
+
+  @@index([prisonerId])
+  @@index([officerId])
+  @@map("custody_logs")
+}
+
+// ─── BIOMETRIC LOGS ───────────────────────────────────────────────────────────
+model BiometricLog {
+  id          String   @id @default(cuid())
+  scanType    String   // FINGERPRINT | IRIS | FACE
+  scanPurpose String   // INTAKE | ROLL_CALL | ACCESS | VERIFICATION
+  location    String
+  deviceId    String?
+  matchScore  Float?
+  matched     Boolean  @default(true)
+  rawHash     String?
+  createdAt   DateTime @default(now())
+
+  prisoner   Prisoner @relation(fields: [prisonerId], references: [id])
+  prisonerId String
+
+  @@index([prisonerId])
+  @@index([scanType])
+  @@index([createdAt])
+  @@map("biometric_logs")
+}
+
+// ─── INVENTORY ────────────────────────────────────────────────────────────────
+model InventoryItem {
+  id           String         @id @default(cuid())
+  itemCode     String         @unique
+  name         String
+  category     String         // FOOD | UNIFORM | MEDICAL | ARMORY | MAINTENANCE | OFFICE
+  unit         String         @default("units")
+  currentStock Int            @default(0)
+  minimumStock Int            @default(10)
+  maximumStock Int            @default(500)
+  unitCost     Float?
+  supplier     String?
+  location     String?
+  isRestricted Boolean        @default(false)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  logs         InventoryLog[]
+
+  @@index([category])
+  @@index([currentStock])
+  @@map("inventory_items")
+}
+
+model InventoryLog {
+  id              String   @id @default(cuid())
+  transactionType String   // IN | OUT | ADJUSTMENT | AUDIT
+  quantity        Int
+  balanceAfter    Int
+  reason          String?
+  referenceId     String?
+  createdAt       DateTime @default(now())
+
+  item       InventoryItem @relation(fields: [itemId], references: [id])
+  itemId     String
+  loggedBy   User          @relation("LoggedBy", fields: [loggedById], references: [id])
+  loggedById String
+
+  @@index([itemId])
+  @@index([loggedById])
+  @@map("inventory_logs")
+}
+
+// ─── AUDIT LOG ────────────────────────────────────────────────────────────────
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String   // CREATE | UPDATE | DELETE | LOGIN | SCAN | EXPORT | VIEW
+  entity    String
+  entityId  String?
+  details   String?  @db.Text
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ─── NATIONAL INTEGRATIONS (NIRA / eCMS) ──────────────────────────────────────
+// Cached locally after an online lookup — system stays usable while offline.
+model NiraLookup {
+  id             String    @id @default(cuid())
+  nationalId     String
+  fullName       String?
+  dob            String?
+  gender         String?
+  photoUrl       String?
+  rawResponse    String?   @db.Text // Full JSON from NIRA API
+  matchedTo      String?            // prisoner prisonerId
+  verifiedAt     DateTime  @default(now())
+  verifiedBy     String             // userId
+  cachedOffline  Boolean   @default(false)
+  cacheExpiresAt DateTime?          // 30 days after caching; re-verify when online
+
+  @@index([nationalId])
+  @@index([cachedOffline])
+  @@map("nira_lookups")
+}
+
+model EcmsCase {
+  id           String    @id @default(cuid())
+  caseNumber   String    @unique
+  prisonerId   String
+  courtName    String
+  judge        String?
+  status       String    @default("OPEN") // OPEN | CLOSED | APPEALED
+  charges      String?   @db.Text
+  lastSyncedAt DateTime?
+  syncPending  Boolean   @default(false) // true = local changes not yet pushed to eCMS
+  rawData      String?   @db.Text        // Full JSON from eCMS (cached for offline use)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  prisoner     Prisoner @relation(fields: [prisonerId], references: [id])
+
+  @@index([prisonerId])
+  @@index([syncPending])
+  @@map("ecms_cases")
+}
+
+// ─── PRISON INDUSTRIES ────────────────────────────────────────────────────────
+model Industry {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  category    String   // FARMING | CARPENTRY | TAILORING | BAKERY | CRAFTS | LAUNDRY | PRINTING | OTHER
+  description String?  @db.Text
+  supervisor  String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  enrollments IndustryEnrollment[]
+  productions IndustryProduction[]
+
+  @@index([isActive])
+  @@map("industries")
+}
+
+model IndustryEnrollment {
+  id         String    @id @default(cuid())
+  startDate  DateTime
+  endDate    DateTime?
+  status     String    @default("ACTIVE") // ACTIVE | COMPLETED | WITHDRAWN
+  notes      String?   @db.Text
+  createdAt  DateTime  @default(now())
+
+  prisoner   Prisoner @relation(fields: [prisonerId], references: [id])
+  prisonerId String
+  industry   Industry @relation(fields: [industryId], references: [id])
+  industryId String
+
+  @@index([prisonerId])
+  @@index([industryId])
+  @@index([status])
+  @@map("industry_enrollments")
+}
+
+model IndustryProduction {
+  id         String   @id @default(cuid())
+  date       DateTime
+  quantity   Float
+  unit       String   // kg | units | metres | loaves | etc
+  valueUGX   Float?
+  notes      String?  @db.Text
+  recordedBy String   // userId
+  createdAt  DateTime @default(now())
+
+  industry   Industry @relation(fields: [industryId], references: [id])
+  industryId String
+
+  @@index([industryId])
+  @@index([date])
+  @@map("industry_productions")
+}
+
+// ─── OFFLINE SYNC QUEUE ───────────────────────────────────────────────────────
+// Stores writes made while offline. Drained automatically when connectivity returns.
+model SyncQueue {
+  id           String    @id @default(cuid())
+  deviceId     String
+  entity       String
+  operation    String    // CREATE | UPDATE | DELETE
+  payload      String    @db.Text // Full JSON of the record
+  localId      String?             // client-generated temp id
+  serverIdMap  String?             // localId → real server id after sync
+  status       String    @default("PENDING") // PENDING | SYNCED | CONFLICT | FAILED
+  conflictData String?   @db.Text // server record that conflicts with local change
+  retryCount   Int       @default(0)
+  lastError    String?   @db.Text
+  createdAt    DateTime  @default(now())
+  syncedAt     DateTime?
+
+  @@index([deviceId, status])
+  @@index([status, createdAt])
+  @@map("sync_queue")
+}
+
+// ─── DEVICE REGISTRY ──────────────────────────────────────────────────────────
+// Tablets/terminals authorised to operate offline and sync back to server.
+model DeviceRegistry {
+  id           String    @id @default(cuid())
+  deviceId     String    @unique // UUID generated on first app launch
+  deviceName   String
+  deviceType   String    @default("TABLET") // TABLET | DESKTOP | TERMINAL
+  assignedTo   String?             // userId of primary user (optional)
+  isAuthorized Boolean   @default(false) // must be approved by ADMIN before syncing
+  lastSeenAt   DateTime?
+  lastSyncAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([isAuthorized])
+  @@map("device_registry")
+}
+
+// ─── DATA PRIVACY (Uganda DPA 2019) ───────────────────────────────────────────
+model DataRequest {
+  id           String    @id @default(cuid())
+  requestType  String    // ACCESS | RECTIFICATION | ERASURE | RESTRICTION | PORTABILITY | OBJECTION
+  subjectName  String
+  subjectId    String?   // prisonerId or nationalId
+  requestedBy  String
+  relationship String?   // Self | Legal Rep | Family
+  status       String    @default("PENDING") // PENDING | IN_REVIEW | FULFILLED | REJECTED
+  notes        String?   @db.Text
+  resolution   String?   @db.Text
+  dueDate      DateTime  // Must be resolved within 21 days per Uganda DPA
+  resolvedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  handledBy    String?   // userId of officer who resolved
+
+  @@index([status])
+  @@index([dueDate])
+  @@map("data_requests")
+}
+
+model ConsentRecord {
+  id         String    @id @default(cuid())
+  prisonerId String
+  purpose    String    // BIOMETRIC_SCAN | MEDICAL_SHARE | NATIONAL_DB_SHARE | RESEARCH | LEGAL_SHARE
+  granted    Boolean
+  grantedAt  DateTime  @default(now())
+  revokedAt  DateTime?
+  notes      String?   @db.Text
+
+  prisoner   Prisoner @relation(fields: [prisonerId], references: [id])
+
+  @@index([prisonerId])
+  @@index([purpose])
+  @@map("consent_records")
+}
