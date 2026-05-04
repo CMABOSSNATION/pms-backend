@@ -1,12 +1,10 @@
 // src/middleware/errorHandler.js
 
 // ─── GLOBAL ERROR HANDLER ─────────────────────────────────────────────────────
-// Catches any error passed via next(err) in route handlers
-
 export const errorHandler = (err, req, res, next) => {
   console.error(`[ERROR] ${req.method} ${req.url} →`, err.message);
 
-  // Prisma unique constraint violation
+  // Prisma unique constraint violation (works for both SQLite + PostgreSQL)
   if (err.code === "P2002") {
     const field = err.meta?.target?.join(", ") || "field";
     return res.status(409).json({ error: `A record with that ${field} already exists` });
@@ -15,6 +13,17 @@ export const errorHandler = (err, req, res, next) => {
   // Prisma record not found
   if (err.code === "P2025") {
     return res.status(404).json({ error: "Record not found" });
+  }
+
+  // Prisma foreign key constraint (SQLite specific)
+  if (err.code === "P2003") {
+    return res.status(400).json({ error: "Related record not found" });
+  }
+
+  // Prisma database connection error (e.g. DB file missing)
+  if (err.code === "P1001" || err.code === "P1003") {
+    console.error("DATABASE ERROR — check DATABASE_URL in .env");
+    return res.status(503).json({ error: "Database unavailable" });
   }
 
   // JWT errors
