@@ -12,12 +12,13 @@ export const performScan = async (req, res, next) => {
       return res.status(400).json({ error: "query and location are required" });
 
     // Find prisoner by fingerprint, prisonerId, or name
+    // NOTE: SQLite does not support mode: "insensitive" — using plain contains
     const prisoner = await prisma.prisoner.findFirst({
       where: {
         OR: [
           { fingerprint: { equals: query } },
           { prisonerId:  { equals: query } },
-          { name:        { contains: query, mode: "insensitive" } },
+          { name:        { contains: query } },
         ],
       },
       include: { alerts: true },

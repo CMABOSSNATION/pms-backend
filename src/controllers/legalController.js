@@ -79,14 +79,14 @@ export const createSentence = async (req, res, next) => {
   try {
     const {
       prisonerId, offenseDescription, sentenceType,
-      sentenceDuration, startDate, goodBehaviorDays, remissionDays, notes,
+      sentenceYears, startDate, goodBehaviorDays, remissionDays, notes,
     } = req.body;
-    if (!prisonerId || !offenseDescription || !sentenceDuration || !startDate)
-      return res.status(400).json({ error: "prisonerId, offenseDescription, sentenceDuration and startDate are required" });
+    if (!prisonerId || !offenseDescription || !sentenceYears || !startDate)
+      return res.status(400).json({ error: "prisonerId, offenseDescription, sentenceYears and startDate are required" });
 
     // Auto-calculate release date
     const start = new Date(startDate);
-    const netDays = parseInt(sentenceDuration)
+    const netDays = parseInt(sentenceYears)
       - (parseInt(goodBehaviorDays) || 0)
       - (parseInt(remissionDays) || 0);
     const calculatedRelease = new Date(start.getTime() + netDays * 86400000);
@@ -95,7 +95,7 @@ export const createSentence = async (req, res, next) => {
       data: {
         offenseDescription,
         sentenceType: sentenceType || "CONSECUTIVE",
-        sentenceDuration: parseInt(sentenceDuration),
+        sentenceYears: parseInt(sentenceYears),
         startDate: start,
         goodBehaviorDays: parseInt(goodBehaviorDays) || 0,
         remissionDays: parseInt(remissionDays) || 0,
@@ -123,7 +123,7 @@ export const updateSentenceCredits = async (req, res, next) => {
 
     const newGood = goodBehaviorDays !== undefined ? parseInt(goodBehaviorDays) : existing.goodBehaviorDays;
     const newRemission = remissionDays !== undefined ? parseInt(remissionDays) : existing.remissionDays;
-    const netDays = existing.sentenceDuration - newGood - newRemission;
+    const netDays = existing.sentenceYears - newGood - newRemission;
     const calculatedRelease = new Date(existing.startDate.getTime() + netDays * 86400000);
 
     const sentence = await prisma.sentenceRecord.update({
